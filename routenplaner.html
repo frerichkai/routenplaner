@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Schelmenpfade</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script>
+        var karte = [];
+    </script>
+    <script src="aventurien.js"></script>
+<!--    <script src="festum.js"></script>-->
+<!--    <script src="vallusa.js"></script>-->
+    <style>
+        #map {
+            height:800px;
+        }
+    </style>
+    <script>
+        var kartenName = new URL(window.location.href).searchParams.get("karte") || "aventurien";
+
+        var aktKarte = karte[kartenName];
+        var kartenInfo = {
+            "aventurien": { breite: 6965, hoehe: 10803 },
+            // "festum": { breite: 4961, hoehe: 3508 },
+            // "vallusa": { breite: 3508, hoehe: 2481 },
+        };
+        var breite = kartenInfo[kartenName].breite;
+        var hoehe = kartenInfo[kartenName].hoehe;
+
+        function init() {
+            var map = L.map('map').setView([0,0], 13);
+            var latLngBounds = L.latLngBounds([[0,0], [hoehe/10000, breite/10000 ]]);
+
+            var imageOverlay = L.imageOverlay(kartenName+".png", latLngBounds, {
+                opacity: 1,
+                interactive: true
+            }).addTo(map);
+            map.fitBounds(latLngBounds);
+
+            var strassen = L.layerGroup([]);
+            for( var linie of aktKarte.linien) {
+                L.polygon([
+                    [(hoehe-linie.start.y)/10000.0, linie.start.x/10000.0],
+                    [(hoehe-linie.ende.y)/10000.0, linie.ende.x/10000.0]
+                ]).addTo(strassen);
+            }
+            var start = document.getElementById("start");
+            var ende = document.getElementById("ende");
+            var orte = L.layerGroup([]);
+            routeLayer = L.layerGroup([]).addTo(map);
+            var ortsnamen = new Array();
+            for( var i in aktKarte.punkte ) {
+                var punkt = aktKarte.punkte[i];
+                if( punkt.name ) {
+                    var marker = L.marker([(hoehe-punkt.y)/10000.0, punkt.x/10000]).addTo(orte);
+                    marker.bindPopup(punkt.name);
+                    ortsnamen.push({index:i, name:punkt.name});
+                }
+            }
+
+            ortsnamen = ortsnamen.sort((a,b) => a.name.localeCompare(b.name));
+            ortsnamen.forEach( o => {
+                var opt = document.createElement('option');
+                opt.value = o.index;
+                opt.innerHTML = o.name;
+                start.appendChild(opt);
+                opt = document.createElement('option');
+                opt.value = o.index;
+                opt.innerHTML = o.name;
+                ende.appendChild(opt);
+            })
+
+            var baseMaps = {
+            };
+            baseMaps[kartenName] = imageOverlay;
+
+            var overlayMaps = {
+                "Straßen": strassen,
+                "Orte": orte
+            };
+
+            var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+        }
+
+        var startPunkt;
+        var vorgaenger = new Array();
+        var routeLayer;
+        function starteNavigation(start) {
+            startPunkt = start;
+            vorgaenger = Array(aktKarte.punkte.length);
+            var distanz = Array.from({length: vorgaenger.length}, (v, i) => Number.MAX_SAFE_INTEGER);
+            distanz[startPunkt] = 0;
+            var offen = Array.from({length: vorgaenger.length}, (v, i) => i);
+            while (offen.length>0) {
+                if( offen.length%100==0)
+                    console.log(offen.length);
+                offen.sort(((a, b) => distanz[a] - distanz[b]));
+                var p = offen[0];
+                var tmp = aktKarte.punkte[p];
+                offen = offen.splice(1);
+                for (var l of aktKarte.linien) {
+                    if (l.start.index == p  || l.ende.index == p) {
+                        var p2 = l.start.index == p && l.start.y==tmp.y ? l.ende.index : l.start.index;
+                        if (offen.includes(p2)) {
+                            var abstand = kosten(l) + distanz[p];
+                            if (abstand < distanz[p2]) {
+                                distanz[p2] = abstand;
+                                vorgaenger[p2] = p;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function laenge(linie) {
+            return Math.sqrt((linie.start.x-linie.ende.x)*(linie.start.x-linie.ende.x)
+                +(linie.start.y-linie.ende.y)*(linie.start.y-linie.ende.y));
+        }
+
+        function kosten(linie) {
+            return laenge(linie)*aktKarte.gelaendetypen[linie.gelaendeyp].zeitProWeg;
+        }
+
+        function navigiere(ziel) {
+            routeLayer.clearLayers();
+            var marker = L.marker([(hoehe-aktKarte.punkte[ziel].y)/10000.0, aktKarte.punkte[ziel].x/10000]).addTo(routeLayer);
+            var text = "<li>Ankunft in "+aktKarte.punkte[ziel].name+"</li>";
+            marker.bindPopup(aktKarte.punkte[ziel].name);
+            var teilLaenge = 0;
+            var gesamtLaenge = 0;
+            var gesamtZeit = 0;
+            var route = [[(hoehe-aktKarte.punkte[ziel].y)/10000.0, aktKarte.punkte[ziel].x/10000]];
+            var letzterOrt = aktKarte.punkte[ziel].name;
+            while( ziel!=startPunkt ) {
+                var tmp = vorgaenger[ziel];
+                for( var l of aktKarte.linien )
+                if( l.start.index==tmp && l.ende.index==ziel || l.start.index==ziel && l.ende.index==tmp ) {
+                    route.push([(hoehe-aktKarte.punkte[tmp].y)/10000.0, aktKarte.punkte[tmp].x/10000]);
+                    var la = laenge(l)*aktKarte.masstab;
+                    gesamtLaenge += la;
+                    teilLaenge += la;
+                    gesamtZeit += la*aktKarte.gelaendetypen[l.gelaendeyp].zeitProWeg;
+                }
+                ziel=tmp;
+                if( aktKarte.punkte[ziel].name ) {
+                    text = "<li>Fahre "+Math.round(teilLaenge)+" bis "+letzterOrt+"</li>"+text;
+                    letzterOrt = aktKarte.punkte[ziel].name;
+                    teilLaenge = 0;
+                }
+
+            }
+            text="<li>Beginne deine Reise in "+aktKarte.punkte[ziel].name+"</li>"+text;
+            L.polyline(route, {color: 'red'}).addTo(routeLayer);
+            marker = L.marker([(hoehe-aktKarte.punkte[ziel].y)/10000.0, aktKarte.punkte[ziel].x/10000]).addTo(routeLayer);
+            marker.bindPopup(aktKarte.punkte[ziel].name);
+            text = "<h3>Wegbeschreibung</h3><ul>"+text+"</ul><p>Gesamtlänge: "+ gesamtLaenge+"</p><p>Gesamtzeit: "+gesamtZeit+"</p>";
+            document.getElementById("wegbeschreibung").innerHTML=text;
+        }
+
+    </script>
+</head>
+<body onload="init()">
+    <div id="map"></div>
+    <select id="start"></select>
+    <select id="ende"></select>
+    <button onclick="starteNavigation(document.getElementById('start').value); navigiere(document.getElementById('ende').value)">Starten</button>
+    <div id="wegbeschreibung"></div>
+</body>
+</html>
