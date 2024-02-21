@@ -2,7 +2,9 @@
 
 Mit diesem kleinen Programmchen kann der geneigte DSA-Fan (oder sonstige Nutzer von Routenplanern) sein eigenes Streckennetz auf einer bestehenden Karte zeichnen und eine einfache Navigation durchführen.
 
-## Starten des Programms
+Außerdem wurde eine HTML-Seite hinzugefügt, mit der man im Browser auf der Aventurien-Karte eine Route berechnen lassen kann.
+
+## Starten des Java-Programms
 
 Die Java-Datei kann ohne besondere Abhängigkeiten kompiliert werden:
 ```javac Routenplaner.java```
@@ -35,3 +37,7 @@ Beim ersten Speichern mit **F5** wird dann eine gleichnamige .json-Datei angeleg
 Ein kleine Demo der Fähigkeiten des Editors kann in folgender Ausgabe der SchelmSchau bewundert werden:
 
 [![SchelmSchau 160](https://img.youtube.com/vi/1FJq-mWnLy8/0.jpg)](https://www.youtube.com/watch?v=1FJq-mWnLy8)
+
+Der Browser-basierte Routenplaner kann hier bestaunt werden:
+
+[![SchelmSchau 161](https://img.youtube.com/vi/-L3-FgP1-Y0/0.jpg)](https://www.youtube.com/watch?v=-L3-FgP1-Y0)
